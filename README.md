@@ -32,11 +32,7 @@ CVproject/
 └── runs/                       # 本地输出目录，已被 .gitignore 忽略
 ```
 
-## 当前本机状态
-
-本机已确认有 NVIDIA RTX 3050 Laptop 4GB 显存，但当前 Python 环境没有安装 `torch`，所以 MatSAM 尚未在本机实际跑通。
-
-由于 `vit_h` 权重较大，4GB 显存基本不适合本机运行；建议云端优先用 `vit_b` 探针。`config.yaml` 中已经把 `matsam.points_per_batch` 做成可调参数，默认 `64`，如果云端 OOM 可降到 `32` 或 `16`。
+config.yaml` 中已经把 `matsam.points_per_batch` 做成可调参数，默认 `64`，如果云端 OOM 可降到 `32` 或 `16`。
 
 ## 云端快速运行
 
