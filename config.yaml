@@ -1,0 +1,70 @@
+# 铝晶粒显微图像：晶粒闭合 + 尺寸统计 全局参数
+# 注：标记 *待首跑调参* 的阈值与 scale.um_per_pixel 绑定；未标定时按像素默认值。
+
+preprocess:
+  clahe_clip_limit: 2.0
+  clahe_grid: [8, 8]
+  median_kernel: 3
+  bilateral_d: 5
+
+scale:
+  um_per_pixel: null            # null=像素单位；填数值开物理单位（μm/px）
+
+# 候选边界生成。主路径 MatSAM，baseline 兜底（GPU/torch 不可用或 OOM 时自动降级）。
+matsam:
+  enabled: true                 # false=强制只用 baseline
+  model_type: vit_b             # 4GB 显存先上 vit_b；云端可改 vit_h
+  checkpoint: MatSAM/checkpoints/sam_vit_b_01ec64.pth
+  device: cuda                  # 无 GPU 改 cpu；torch 缺失/OOM 自动降级 baseline
+  layers: 0
+  scales: 3
+  n_per_side_base: 32
+  method_type: 1                # 1=Canny 预分割质心点, 2=OTSU
+  pred_iou_thresh: 0.90
+  stability_score_thresh: 0.92
+  box_nms_thresh: 0.80
+  crop_nms_thresh: 0.80
+  points_per_batch: 64          # SAM 每批 prompt 数；显存紧张时降到 32/16，云端可升 128/256
+  area_threshold: 25000         # *待首跑调参*
+  min_size: 200
+
+baseline:                       # 传统法候选边界（暗晶界提取，对照 + 兜底）
+  threshold_mode: percentile    # percentile | otsu | mean_std
+  dark_percentile: 15           # percentile: 取最暗 N% 像素当晶界前景
+  dark_k_std: 0.5               # mean_std: 阈值 = mean - k*std
+  morph_open_size: 5            # 开运算核（去细碎划痕/纹理，需大于划痕宽度、小于晶界宽度）
+  morph_close_size: 7           # 闭运算核（连断口）
+  min_segment_size: 120         # 候选边界去小连通域
+
+# 4.3 段切分
+segment:
+  skeleton_method: lee
+  endpoint_fit_n: 5             # 端点切线方向拟合用相邻骨架点数
+
+# 4.4 支晶/噪点剔除（阈值与 um_per_pixel 绑定；未标定用像素默认值 *待首跑调参*）
+boundary_clean:
+  L_min: 12                     # 噪点段长度下限（暗晶界基线放宽，避免误删短真晶界）
+  L_short: 50                   # 孤立短线上限（旧 80 在稀疏基线下误删过多真晶界）
+  D_iso: 90                     # 孤立距离阈值（暗晶界基线段间距大，旧 40 误判严重）
+  closure_method: morphology    # morphology | graph
+  closure_close_size: 7         # 闭合检测用闭运算核
+  closure_fill_area: 50         # 填孔最小面积
+  on_boundary_tol: 3            # 段像素落在"闭合边界带"内的容差(px)
+  dendrite_curv_max: 0.35       # 支晶臂最大曲率（越直越像支晶）
+  dendrite_len_max: 100         # 支晶臂最大长度
+
+# 4.5 断口修复 *待首跑调参*
+repair:
+  R_connect: 35                 # 端点搜索半径(px)
+  angle_thresh: 30              # 切线方向夹角阈值(°)
+
+# 4.7 ASTM E112 截线法
+intercept:
+  directions: [0, 45, 90, 135]  # 截线方向(°)；至少 0/90
+  line_spacing: 40              # 同方向平行线间距(px)
+  N_min: 50                    # 累计交点数达此即停
+  primary_metric: L_bar
+
+output:
+  runs_dir: runs
+  save_steps: true              # 是否保存 01~05 单步图

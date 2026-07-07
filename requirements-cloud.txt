@@ -1,0 +1,8 @@
+opencv-python
+scikit-image
+scipy
+numpy
+PyYAML
+matplotlib
+Pillow
+natsort

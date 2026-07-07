@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+.venv*/
+
+runs/
+runs_review/
+runs_matsam*/
+dist/
+
+MatSAM/checkpoints/*.pth
+!MatSAM/checkpoints/Put the chckpoint here
+MatSAM/.git_vendor_backup/
+
+.DS_Store
+Thumbs.db
