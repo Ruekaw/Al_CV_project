@@ -38,7 +38,10 @@ def run_pipeline(image_path: str, cfg: dict, runs_dir: str = "runs") -> dict:
     name = os.path.splitext(os.path.basename(image_path))[0]
     out_dir = os.path.join(runs_dir, name)
     os.makedirs(out_dir, exist_ok=True)
-    save_steps = bool(cfg["output"]["save_steps"])
+    output_cfg = cfg.get("output", {})
+    save_steps = bool(output_cfg.get("save_steps", True))
+    overlay_line_width = int(output_cfg.get("overlay_line_width", 3))
+    intercept_point_radius = int(output_cfg.get("intercept_point_radius", 4))
 
     t0 = time.time()
     image_bgr = imread_unicode(image_path)
@@ -49,7 +52,7 @@ def run_pipeline(image_path: str, cfg: dict, runs_dir: str = "runs") -> dict:
         imwrite_unicode(os.path.join(out_dir, "01_preprocess.png"), enhanced)
 
     # 4.2 候选边界
-    candidate, method = generate_candidate_boundary(image_bgr, cfg)
+    candidate, method = generate_candidate_boundary(image_bgr, cfg, matsam_image=enhanced)
     if save_steps:
         imwrite_unicode(os.path.join(out_dir, "02_candidate_boundary.png"), candidate)
 
@@ -61,7 +64,10 @@ def run_pipeline(image_path: str, cfg: dict, runs_dir: str = "runs") -> dict:
     if save_steps:
         imwrite_unicode(
             os.path.join(out_dir, "03_cleaned_boundary.png"),
-            boundary_overlay(image_bgr, cleaned, deleted=deleted, added=None),
+            boundary_overlay(
+                image_bgr, cleaned, deleted=deleted, added=None,
+                line_width=overlay_line_width,
+            ),
         )
 
     # 4.5 断口修复
@@ -69,7 +75,10 @@ def run_pipeline(image_path: str, cfg: dict, runs_dir: str = "runs") -> dict:
     if save_steps:
         imwrite_unicode(
             os.path.join(out_dir, "04_final_boundary.png"),
-            boundary_overlay(image_bgr, final, deleted=deleted, added=added),
+            boundary_overlay(
+                image_bgr, final, deleted=deleted, added=added,
+                line_width=overlay_line_width,
+            ),
         )
 
     # 4.7 截线法（基于最终闭合晶界图）
@@ -79,7 +88,11 @@ def run_pipeline(image_path: str, cfg: dict, runs_dir: str = "runs") -> dict:
     if save_steps:
         imwrite_unicode(
             os.path.join(out_dir, "05_intercept.png"),
-            intercept_overlay(image_bgr, final, lines_viz),
+            intercept_overlay(
+                image_bgr, final, lines_viz,
+                line_width=overlay_line_width,
+                point_radius=intercept_point_radius,
+            ),
         )
 
     # 闭合自检
@@ -92,9 +105,19 @@ def run_pipeline(image_path: str, cfg: dict, runs_dir: str = "runs") -> dict:
                 image_bgr,
                 enhanced,
                 candidate,
-                boundary_overlay(image_bgr, cleaned, deleted=deleted),
-                boundary_overlay(image_bgr, final, added=added),
-                intercept_overlay(image_bgr, final, lines_viz),
+                boundary_overlay(
+                    image_bgr, cleaned, deleted=deleted,
+                    line_width=overlay_line_width,
+                ),
+                boundary_overlay(
+                    image_bgr, final, added=added,
+                    line_width=overlay_line_width,
+                ),
+                intercept_overlay(
+                    image_bgr, final, lines_viz,
+                    line_width=overlay_line_width,
+                    point_radius=intercept_point_radius,
+                ),
             ],
             ["原图", "预处理", "候选边界", f"剔除(删{clean_info['n_deleted']})",
              f"修复(补{repair_info['n_repaired']})", "截线"],

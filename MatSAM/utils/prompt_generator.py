@@ -15,15 +15,23 @@ class PromptGenerator(object):
     def generate_prompt_points(self):
         center_res = []
         np_center_res = []
+        h, w = self.image.shape[:2]
 
         # generate region-aware prompt points using traditional segmentation methods
         if self.method_type == 1:
-            dst = cv2.Canny(self.image, 80, 130)
+            if self.image.ndim == 3:
+                edge_src = cv2.cvtColor(self.image, cv2.COLOR_RGB2GRAY)
+            else:
+                edge_src = self.image
+            dst = cv2.Canny(edge_src, 80, 130)
             canny_img = PostPrecess.remove_small_objects(dst, min_size=15)
             canny_img = PostPrecess.dilation(np.uint8(canny_img > 0) * 255, square=5)
             contours, hierarchy = cv2.findContours(canny_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_TC89_KCOS)
         elif self.method_type == 2:
-            image_gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+            if self.image.ndim == 3:
+                image_gray = cv2.cvtColor(self.image, cv2.COLOR_RGB2GRAY)
+            else:
+                image_gray = self.image
             blurred = cv2.GaussianBlur(image_gray, (5, 5), 0)
             _, otsu_image = cv2.threshold(blurred, 50, 225, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             contours, hierarchy = cv2.findContours(otsu_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_TC89_KCOS)
@@ -32,9 +40,10 @@ class PromptGenerator(object):
         for n, item1 in enumerate(contours):
             M = cv2.moments(item1)
             if M["m00"] != 0:
-                cX = M["m10"] / M["m00"] / self.image.shape[0]
-                cY = M["m01"] / M["m00"] / self.image.shape[1]
-                np_center_res.append([cX, cY])
+                cX = M["m10"] / M["m00"] / w
+                cY = M["m01"] / M["m00"] / h
+                if 0 <= cX <= 1 and 0 <= cY <= 1:
+                    np_center_res.append([cX, cY])
         center_res.append(np.array(np_center_res))
 
         # automatically adjust the number of grid points based on regional perception point density

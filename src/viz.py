@@ -20,35 +20,43 @@ def overlay_on_original(orig_bgr: np.ndarray, mask: np.ndarray, color) -> np.nda
     return out
 
 
+def _mask_for_overlay(mask: np.ndarray, line_width: int) -> np.ndarray:
+    m = mask > 0
+    if line_width <= 1:
+        return m
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (line_width, line_width))
+    return cv2.dilate(np.uint8(m) * 255, kernel) > 0
+
+
 def boundary_overlay(orig_bgr: np.ndarray, boundary_bin: np.ndarray,
-                     deleted=None, added=None) -> np.ndarray:
+                     deleted=None, added=None, line_width: int = 1) -> np.ndarray:
     """白=保留边界，红=被删段，蓝=补连段。"""
     out = orig_bgr.copy()
     if out.ndim == 2:
         out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
     if boundary_bin is not None:
-        m = boundary_bin > 0
+        m = _mask_for_overlay(boundary_bin, line_width)
         out[m] = (235, 235, 235)
     if deleted is not None and deleted.any():
-        m = deleted > 0
+        m = _mask_for_overlay(deleted, line_width)
         out[m] = (60, 60, 230)   # 红
     if added is not None and added.any():
-        m = added > 0
+        m = _mask_for_overlay(added, line_width)
         out[m] = (230, 160, 60)  # 蓝
     return out
 
 
 def intercept_overlay(orig_bgr: np.ndarray, boundary_bin: np.ndarray,
-                      lines_for_viz) -> np.ndarray:
+                      lines_for_viz, line_width: int = 1, point_radius: int = 3) -> np.ndarray:
     """在图上画截线交点（按方向着色）+ 边界半透明灰。"""
     out = orig_bgr.copy()
     if out.ndim == 2:
         out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
-    out[boundary_bin > 0] = (200, 200, 200)
+    out[_mask_for_overlay(boundary_bin, line_width)] = (200, 200, 200)
     dir_color = {0: (0, 200, 200), 45: (200, 0, 200), 90: (0, 0, 220), 135: (220, 160, 0)}
     for ang, (r, c), _P in lines_for_viz:
         col = dir_color.get(ang, (0, 255, 0))
-        cv2.circle(out, (int(c), int(r)), 3, col, -1)
+        cv2.circle(out, (int(c), int(r)), point_radius, col, -1)
     return out
 
 

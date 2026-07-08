@@ -20,12 +20,15 @@ matsam:
   scales: 3
   n_per_side_base: 32
   method_type: 1                # 1=Canny 预分割质心点, 2=OTSU
-  pred_iou_thresh: 0.90
-  stability_score_thresh: 0.92
+  pred_iou_thresh: 0.84
+  stability_score_thresh: 0.89
   box_nms_thresh: 0.80
   crop_nms_thresh: 0.80
   points_per_batch: 64          # SAM 每批 prompt 数；显存紧张时降到 32/16，云端可升 128/256
-  area_threshold: 25000         # *待首跑调参*
+  area_threshold: 150000        # *待首跑调参*
+  min_area_threshold: 4000
+  max_mask_aspect_ratio: 8.0
+  min_mask_extent: 0.12
   min_size: 200
 
 baseline:                       # 传统法候选边界（暗晶界提取，对照 + 兜底）

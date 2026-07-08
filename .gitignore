@@ -7,6 +7,7 @@ __pycache__/
 runs/
 runs_review/
 runs_matsam*/
+runs_tune*/
 dist/
 
 MatSAM/checkpoints/*.pth

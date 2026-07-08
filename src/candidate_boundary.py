@@ -15,6 +15,37 @@ from skimage import morphology
 from .image_io import imread_unicode  # noqa: F401  (re-export for convenience)
 
 
+def _to_matsam_rgb(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 2:
+        return cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    if image.ndim == 3 and image.shape[2] == 1:
+        return cv2.cvtColor(image[:, :, 0], cv2.COLOR_GRAY2RGB)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+
+def _mask_passes_matsam_filters(mask_info: dict, area: int, cfg: dict) -> bool:
+    min_area = int(cfg.get("min_area_threshold", 0))
+    if area < min_area:
+        return False
+
+    bbox = mask_info.get("bbox")
+    if not bbox or len(bbox) < 4:
+        return True
+
+    _, _, bw, bh = bbox
+    if bw <= 0 or bh <= 0:
+        return True
+
+    aspect = max(bw, bh) / max(min(bw, bh), 1)
+    extent = area / max(bw * bh, 1)
+    max_aspect = float(cfg.get("max_mask_aspect_ratio", 0))
+    min_extent = float(cfg.get("min_mask_extent", 0))
+    if max_aspect > 0 and min_extent > 0:
+        if aspect >= max_aspect and extent <= min_extent:
+            return False
+    return True
+
+
 # ---------------------------------------------------------------- baseline
 def _baseline_boundary(image_bgr: np.ndarray, cfg: dict) -> np.ndarray:
     """传统法候选边界：暗晶界提取。
@@ -67,7 +98,7 @@ def _baseline_boundary(image_bgr: np.ndarray, cfg: dict) -> np.ndarray:
 
 
 # ---------------------------------------------------------------- matsam
-def _matsam_boundary(image_bgr: np.ndarray, cfg: dict):
+def _matsam_boundary(image: np.ndarray, cfg: dict):
     """MatSAM 主路径。失败/降级时返回 None（不抛异常到外层）。
 
     复用 MatSAM/utils 的 PromptGenerator + segment_anything_。MatSAM 非 Python 包，
@@ -115,7 +146,7 @@ def _matsam_boundary(image_bgr: np.ndarray, cfg: dict):
         print(f"[matsam] 模型加载失败，降级 baseline: {e}")
         return None
 
-    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    image_rgb = _to_matsam_rgb(image)
 
     prompter = PromptGenerator(
         image_rgb, m["layers"], m["scales"],
@@ -148,14 +179,15 @@ def _matsam_boundary(image_bgr: np.ndarray, cfg: dict):
 
     # 按 notebook 流程：对每个 mask Laplacian 取边界，骨架化+膨胀腐蚀连成细线
     area_threshold = int(m["area_threshold"])
-    h, w = image_bgr.shape[:2]
+    h, w = image_rgb.shape[:2]
     result = np.zeros((h, w), np.uint8)
     for mk in masks:
         tmp = np.uint8(mk["segmentation"].astype(np.uint8) > 0) * 255
         if tmp.sum() == 0:
             continue
-        avg_pixel = float(np.average(image_rgb[tmp > 0])) if (tmp > 0).any() else 0.0
-        area = int(np.sum(tmp == 255))
+        area = int(mk.get("area", np.sum(tmp == 255)))
+        if not _mask_passes_matsam_filters(mk, area, m):
+            continue
         if area <= area_threshold:
             tmp = cv2.Laplacian(tmp, cv2.CV_8U)
             tmp = PostPrecess.remove_small_objects(tmp, min_size=50)
@@ -173,9 +205,9 @@ def _matsam_boundary(image_bgr: np.ndarray, cfg: dict):
 
 
 # ---------------------------------------------------------------- entry
-def generate_candidate_boundary(image_bgr: np.ndarray, cfg: dict):
+def generate_candidate_boundary(image_bgr: np.ndarray, cfg: dict, matsam_image: np.ndarray = None):
     """返回 (boundary_bin 0/255, method_used: 'matsam'|'baseline')。"""
-    boundary = _matsam_boundary(image_bgr, cfg)
+    boundary = _matsam_boundary(matsam_image if matsam_image is not None else image_bgr, cfg)
     if boundary is not None and boundary.any():
         return boundary, "matsam"
     print("[candidate] 采用 baseline 路径生成候选边界")
